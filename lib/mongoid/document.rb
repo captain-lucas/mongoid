@@ -164,6 +164,33 @@ module Mongoid
       attributes
     end
 
+
+    def _children
+      @_children ||= collect_children
+    end
+
+    # Collect all the children of this document.
+    #
+    # @example Collect all the children.
+    #   document.collect_children
+    #
+    # @return [ Array<Document> ] The children.
+    #
+    # @since 2.4.0
+    def collect_children
+      children = []
+      embedded_relations.each_pair do |name, metadata|
+        without_autobuild do
+          child = send(name)
+          Array.wrap(child).each do |doc|
+            children.push(doc)
+            children.concat(doc._children)
+          end if child
+        end
+      end
+      children
+    end
+
     # Returns an instance of the specified class with the attributes,
     # errors, and embedded documents of the current document.
     #
@@ -192,13 +219,9 @@ module Mongoid
       became._type = klass.to_s
 
       # mark embedded docs as persisted
-      embedded_relations.each_pair do |name, meta|
-        without_autobuild do
-          relation = became.__send__(name)
-          Array.wrap(relation).each do |r|
-            r.instance_variable_set(:@new_record, new_record?)
-          end
-        end
+      
+      became._children.each do |child|
+        child.instance_variable_set(:@new_record, new_record?)
       end
 
       IdentityMap.set(became) unless became.new_record?
